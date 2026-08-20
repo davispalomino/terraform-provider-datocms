@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -18,6 +19,10 @@ import (
 var errNotFound = errors.New("resource not found")
 
 const maxRequestAttempts = 3
+
+// maxRateLimitWait caps the wait derived from the x-ratelimit-reset header so
+// a bogus or huge value cannot stall the provider.
+const maxRateLimitWait = 60 * time.Second
 
 // doRequest performs an authenticated request against the DatoCMS CMA,
 // handling the required headers, JSON:API error bodies and 429 rate-limit
@@ -73,6 +78,9 @@ func (c *DatoCMSClient) doRequest(ctx context.Context, method, path string, body
 			if reset := resp.Header.Get("x-ratelimit-reset"); reset != "" {
 				if seconds, err := strconv.ParseFloat(reset, 64); err == nil && seconds > 0 {
 					wait = time.Duration(seconds * float64(time.Second))
+					if wait > maxRateLimitWait {
+						wait = maxRateLimitWait
+					}
 				}
 			}
 			select {
@@ -231,7 +239,7 @@ func (c *DatoCMSClient) CreateRole(ctx context.Context, attrs roleAttributes, in
 // errNotFound on 404.
 func (c *DatoCMSClient) GetRole(ctx context.Context, id string) (*roleData, error) {
 	var out rolePayload
-	if err := c.doRequest(ctx, http.MethodGet, "/roles/"+id, nil, &out); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, "/roles/"+url.PathEscape(id), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out.Data, nil
@@ -247,7 +255,7 @@ func (c *DatoCMSClient) UpdateRole(ctx context.Context, id string, attrs roleAtt
 		Relationships: newRoleRelationships(inheritsFrom),
 	}}
 	var out rolePayload
-	if err := c.doRequest(ctx, http.MethodPut, "/roles/"+id, body, &out); err != nil {
+	if err := c.doRequest(ctx, http.MethodPut, "/roles/"+url.PathEscape(id), body, &out); err != nil {
 		return nil, err
 	}
 	return &out.Data, nil
@@ -255,7 +263,7 @@ func (c *DatoCMSClient) UpdateRole(ctx context.Context, id string, attrs roleAtt
 
 // DeleteRole deletes a role via DELETE /roles/{id}.
 func (c *DatoCMSClient) DeleteRole(ctx context.Context, id string) error {
-	return c.doRequest(ctx, http.MethodDelete, "/roles/"+id, nil, nil)
+	return c.doRequest(ctx, http.MethodDelete, "/roles/"+url.PathEscape(id), nil, nil)
 }
 
 // --- Webhook API types (JSON:API) ---
@@ -321,7 +329,7 @@ func (c *DatoCMSClient) CreateWebhook(ctx context.Context, attrs webhookAttribut
 // wrapping errNotFound on 404.
 func (c *DatoCMSClient) GetWebhook(ctx context.Context, id string) (*webhookData, error) {
 	var out webhookPayload
-	if err := c.doRequest(ctx, http.MethodGet, "/webhooks/"+id, nil, &out); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, "/webhooks/"+url.PathEscape(id), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out.Data, nil
@@ -336,7 +344,7 @@ func (c *DatoCMSClient) UpdateWebhook(ctx context.Context, id string, attrs webh
 		Attributes: attrs,
 	}}
 	var out webhookPayload
-	if err := c.doRequest(ctx, http.MethodPut, "/webhooks/"+id, body, &out); err != nil {
+	if err := c.doRequest(ctx, http.MethodPut, "/webhooks/"+url.PathEscape(id), body, &out); err != nil {
 		return nil, err
 	}
 	return &out.Data, nil
@@ -344,7 +352,7 @@ func (c *DatoCMSClient) UpdateWebhook(ctx context.Context, id string, attrs webh
 
 // DeleteWebhook deletes a webhook via DELETE /webhooks/{id}.
 func (c *DatoCMSClient) DeleteWebhook(ctx context.Context, id string) error {
-	return c.doRequest(ctx, http.MethodDelete, "/webhooks/"+id, nil, nil)
+	return c.doRequest(ctx, http.MethodDelete, "/webhooks/"+url.PathEscape(id), nil, nil)
 }
 
 // --- Access token API types (JSON:API) ---
@@ -423,7 +431,7 @@ func (c *DatoCMSClient) CreateAccessToken(ctx context.Context, attrs accessToken
 // caller's role lacks can_manage_access_tokens.
 func (c *DatoCMSClient) GetAccessToken(ctx context.Context, id string) (*accessTokenData, error) {
 	var out accessTokenPayload
-	if err := c.doRequest(ctx, http.MethodGet, "/access_tokens/"+id, nil, &out); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, "/access_tokens/"+url.PathEscape(id), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out.Data, nil
@@ -441,7 +449,7 @@ func (c *DatoCMSClient) UpdateAccessToken(ctx context.Context, id string, attrs 
 		Relationships: newAccessTokenRelationships(roleID),
 	}}
 	var out accessTokenPayload
-	if err := c.doRequest(ctx, http.MethodPut, "/access_tokens/"+id, body, &out); err != nil {
+	if err := c.doRequest(ctx, http.MethodPut, "/access_tokens/"+url.PathEscape(id), body, &out); err != nil {
 		return nil, err
 	}
 	return &out.Data, nil
@@ -454,5 +462,5 @@ func (c *DatoCMSClient) UpdateAccessToken(ctx context.Context, id string, attrs 
 // fail with an explanatory API error. A token also cannot delete itself
 // (CANNOT_DESTROY_CURRENT_USER).
 func (c *DatoCMSClient) DeleteAccessToken(ctx context.Context, id string) error {
-	return c.doRequest(ctx, http.MethodDelete, "/access_tokens/"+id, nil, nil)
+	return c.doRequest(ctx, http.MethodDelete, "/access_tokens/"+url.PathEscape(id), nil, nil)
 }

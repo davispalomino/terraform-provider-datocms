@@ -27,4 +27,4 @@ provider "datocms" {
 ### Optional
 
 - `api_token` (String, Sensitive) DatoCMS API token. Can also be set via the `DATOCMS_API_TOKEN` environment variable.
-- `base_url` (String) Base URL of the DatoCMS API. Defaults to `https://site-api.datocms.com`.
+- `base_url` (String) Base URL of the DatoCMS API. Defaults to `https://site-api.datocms.com`. Must use the `https` scheme; `http` is only allowed for `localhost`/`127.0.0.1` (local testing).

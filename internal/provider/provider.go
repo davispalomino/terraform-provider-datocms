@@ -4,10 +4,14 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -56,10 +60,32 @@ func (p *DatoCMSProvider) Schema(ctx context.Context, req provider.SchemaRequest
 				Sensitive:           true,
 			},
 			"base_url": schema.StringAttribute{
-				MarkdownDescription: "Base URL of the DatoCMS API. Defaults to `" + defaultBaseURL + "`.",
+				MarkdownDescription: "Base URL of the DatoCMS API. Defaults to `" + defaultBaseURL + "`. Must use the `https` scheme; `http` is only allowed for `localhost`/`127.0.0.1` (local testing).",
 				Optional:            true,
 			},
 		},
+	}
+}
+
+// validateBaseURL ensures the configured base URL uses https, allowing plain
+// http only for localhost/127.0.0.1 (local testing).
+func validateBaseURL(baseURL string) error {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("could not parse %q as a URL: %w", baseURL, err)
+	}
+
+	switch parsed.Scheme {
+	case "https":
+		return nil
+	case "http":
+		host := parsed.Hostname()
+		if host == "localhost" || host == "127.0.0.1" {
+			return nil
+		}
+		return fmt.Errorf("base_url %q must use the https scheme; http is only allowed for localhost/127.0.0.1", baseURL)
+	default:
+		return fmt.Errorf("base_url %q must use the https scheme (http is only allowed for localhost/127.0.0.1)", baseURL)
 	}
 }
 
@@ -90,10 +116,19 @@ func (p *DatoCMSProvider) Configure(ctx context.Context, req provider.ConfigureR
 		baseURL = data.BaseURL.ValueString()
 	}
 
+	if err := validateBaseURL(baseURL); err != nil {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("base_url"),
+			"Invalid base_url",
+			err.Error(),
+		)
+		return
+	}
+
 	client := &DatoCMSClient{
 		APIToken:   apiToken,
 		BaseURL:    baseURL,
-		HTTPClient: http.DefaultClient,
+		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 	}
 
 	resp.DataSourceData = client
