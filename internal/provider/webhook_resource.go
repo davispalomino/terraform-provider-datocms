@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -40,6 +39,7 @@ type WebhookResource struct {
 // WebhookResourceModel describes the resource data model.
 type WebhookResourceModel struct {
 	ID                   types.String `tfsdk:"id"`
+	Project              types.String `tfsdk:"project"`
 	Name                 types.String `tfsdk:"name"`
 	URL                  types.String `tfsdk:"url"`
 	Headers              types.Map    `tfsdk:"headers"`
@@ -111,6 +111,7 @@ func (r *WebhookResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Required:            true,
 				MarkdownDescription: "Unique name of the webhook. UI: \"Name\".",
 			},
+			"project": projectAttribute(),
 			"url": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "URL to call. Mustache tags are supported for dynamic destinations. UI: HTTP Settings > \"URL\".",
@@ -363,7 +364,12 @@ func (r *WebhookResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	webhook, err := r.client.CreateWebhook(ctx, attrs)
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	webhook, err := client.CreateWebhook(ctx, attrs)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating DatoCMS webhook", err.Error())
 		return
@@ -384,7 +390,12 @@ func (r *WebhookResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	webhook, err := r.client.GetWebhook(ctx, data.ID.ValueString())
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	webhook, err := client.GetWebhook(ctx, data.ID.ValueString())
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			resp.State.RemoveResource(ctx)
@@ -416,7 +427,12 @@ func (r *WebhookResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	if _, err := r.client.UpdateWebhook(ctx, data.ID.ValueString(), attrs); err != nil {
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	if _, err := client.UpdateWebhook(ctx, data.ID.ValueString(), attrs); err != nil {
 		resp.Diagnostics.AddError("Error updating DatoCMS webhook", err.Error())
 		return
 	}
@@ -432,7 +448,12 @@ func (r *WebhookResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	if err := r.client.DeleteWebhook(ctx, data.ID.ValueString()); err != nil {
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	if err := client.DeleteWebhook(ctx, data.ID.ValueString()); err != nil {
 		if errors.Is(err, errNotFound) {
 			return
 		}
@@ -441,5 +462,5 @@ func (r *WebhookResource) Delete(ctx context.Context, req resource.DeleteRequest
 }
 
 func (r *WebhookResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	importStateWithProject(ctx, req, resp)
 }

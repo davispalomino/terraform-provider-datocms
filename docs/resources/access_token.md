@@ -80,6 +80,7 @@ The token secret shown by the UI after creation corresponds to the computed, sen
 - `can_access_cda` (Boolean) Whether the token can call the Content Delivery API (the GraphQL endpoint at `https://graphql.datocms.com/`) to fetch published content. UI: Permissions > "Access the Content Delivery API" toggle.
 - `can_access_cda_preview` (Boolean) Whether the token can call the Content Delivery API with the `X-Include-Drafts: true` header to fetch draft (unpublished) content. UI: Permissions > "Access the Content Delivery API in Preview Mode" toggle.
 - `can_access_cma` (Boolean) Whether the token can access the Content Management API. The UI warns: depending on the role's permissions, enabling this option may allow write or administrative operations, so use with caution. UI: Permissions > "Access the Content Management API" toggle.
+- `project` (String) Key of the provider's `api_tokens` map whose token is used for all API calls of this resource. When omitted, the default token (`api_token` attribute or `DATOCMS_API_TOKEN` environment variable) is used. Changing this attribute forces the resource to be recreated, since each key targets a different DatoCMS project.
 
 ### Read-Only
 
@@ -88,7 +89,7 @@ The token secret shown by the UI after creation corresponds to the computed, sen
 
 ## Import
 
-Import is supported using the access token ID:
+Import is supported using the access token ID, optionally prefixed with the project key of the provider's `api_tokens` map (`project/id`):
 
 ```shell
 # Access tokens can be imported using the access token ID
@@ -96,6 +97,10 @@ Import is supported using the access token ID:
 # Note: the token secret is populated only if the credential used by the provider
 # has can_manage_access_tokens; otherwise the API masks it and `token` stays empty.
 terraform import datocms_access_token.frontend 12345
+
+# When the resource uses a project from the provider's api_tokens map,
+# prefix the ID with the project key ("project/id").
+terraform import datocms_access_token.frontend store-one/12345
 ```
 
 Note: on import the `token` secret is populated only if the API token used by the provider belongs to a role with `can_manage_access_tokens`; otherwise the API masks it (returns null) and the attribute stays empty in the state until a read with sufficient permissions happens.

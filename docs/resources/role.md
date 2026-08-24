@@ -207,6 +207,7 @@ Negative permissions always take precedence over positive ones. On update the AP
 - `positive_item_type_permissions` (Attributes List) Item type (model) permissions granted for the role. Negative permissions take precedence over positive ones. UI: Content permissions > "Records and assets permissions". (see [below for nested schema](#nestedatt--positive_item_type_permissions))
 - `positive_search_index_permissions` (Attributes List) Search indexes the role can  re-index manually. A `null` `search_index` covers every index. Creating/editing the indexes themselves is gated by `can_manage_search_indexes`. UI: Permissions to index with Search Indexes > "Add new rule". (see [below for nested schema](#nestedatt--positive_search_index_permissions))
 - `positive_upload_permissions` (Attributes List) Upload permissions granted for the role. Negative permissions take precedence over positive ones. UI: Content permissions > "Records and assets permissions" (media area). (see [below for nested schema](#nestedatt--positive_upload_permissions))
+- `project` (String) Key of the provider's `api_tokens` map whose token is used for all API calls of this resource. When omitted, the default token (`api_token` attribute or `DATOCMS_API_TOKEN` environment variable) is used. Changing this attribute forces the resource to be recreated, since each key targets a different DatoCMS project.
 
 ### Read-Only
 
@@ -317,10 +318,14 @@ Optional:
 
 ## Import
 
-Import is supported using the role ID:
+Import is supported using the role ID, optionally prefixed with the project key of the provider's `api_tokens` map (`project/id`):
 
 ```shell
 # Roles can be imported using the role ID
 # (shown in the URL when editing the role in the DatoCMS UI, or returned by GET /roles).
 terraform import datocms_role.store_developer 000003
+
+# When the resource uses a project from the provider's api_tokens map,
+# prefix the ID with the project key ("project/id").
+terraform import datocms_role.store_developer store-one/000003
 ```

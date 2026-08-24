@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -39,6 +38,7 @@ type RoleResource struct {
 // RoleResourceModel describes the resource data model.
 type RoleResourceModel struct {
 	ID                              types.String `tfsdk:"id"`
+	Project                         types.String `tfsdk:"project"`
 	Name                            types.String `tfsdk:"name"`
 	CanEditSite                     types.Bool   `tfsdk:"can_edit_site"`
 	CanEditFavicon                  types.Bool   `tfsdk:"can_edit_favicon"`
@@ -316,6 +316,7 @@ func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 				Required:            true,
 				MarkdownDescription: "Name of the role.",
 			},
+			"project":                            projectAttribute(),
 			"can_edit_site":                      canFlagAttribute("Whether the role can change project-wide settings (project name, internal subdomain, frontend preview URL, deployment settings). UI: Project and environment management > \"Change project global properties\"."),
 			"can_edit_favicon":                   canFlagAttribute("Whether the role can edit favicon, global SEO settings and no-index policy. UI: Environment permissions > \"Edit favicon, global SEO settings and no-index policy\"."),
 			"can_edit_schema":                    canFlagAttribute("Whether the role can create and edit the project schema: models, block models, fields, fieldsets, validators and plugins. UI: Environment permissions > \"Create/edit models and plugins\"."),
@@ -641,7 +642,12 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	role, err := r.client.CreateRole(ctx, attrs, inheritsFrom)
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	role, err := client.CreateRole(ctx, attrs, inheritsFrom)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating DatoCMS role", err.Error())
 		return
@@ -667,7 +673,12 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	role, err := r.client.GetRole(ctx, data.ID.ValueString())
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	role, err := client.GetRole(ctx, data.ID.ValueString())
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			resp.State.RemoveResource(ctx)
@@ -699,7 +710,12 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	role, err := r.client.UpdateRole(ctx, data.ID.ValueString(), attrs, inheritsFrom)
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	role, err := client.UpdateRole(ctx, data.ID.ValueString(), attrs, inheritsFrom)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating DatoCMS role", err.Error())
 		return
@@ -720,7 +736,12 @@ func (r *RoleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	if err := r.client.DeleteRole(ctx, data.ID.ValueString()); err != nil {
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	if err := client.DeleteRole(ctx, data.ID.ValueString()); err != nil {
 		if errors.Is(err, errNotFound) {
 			return
 		}
@@ -729,5 +750,5 @@ func (r *RoleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 }
 
 func (r *RoleResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	importStateWithProject(ctx, req, resp)
 }
