@@ -11,7 +11,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,6 +25,48 @@ const maxRequestAttempts = 3
 // maxRateLimitWait caps the wait derived from the x-ratelimit-reset header so
 // a bogus or huge value cannot stall the provider.
 const maxRateLimitWait = 60 * time.Second
+
+// forProject resolves the client to use for the given project key. An empty
+// project selects the default token (api_token attribute or DATOCMS_API_TOKEN
+// environment variable); a non-empty project selects the matching entry of the
+// api_tokens provider attribute. The returned client shares the HTTP client
+// and base URL of the receiver. Error messages never include token values.
+func (c *DatoCMSClient) forProject(project string) (*DatoCMSClient, error) {
+	if project == "" {
+		if c.APIToken == "" {
+			return nil, errors.New("no default API token is configured: set the api_token provider attribute or the DATOCMS_API_TOKEN environment variable, or set the resource's project attribute to one of the keys of api_tokens")
+		}
+		return c, nil
+	}
+
+	token, ok := c.APITokens[project]
+	if !ok {
+		keys := make([]string, 0, len(c.APITokens))
+		for key := range c.APITokens {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		if len(keys) == 0 {
+			return nil, fmt.Errorf("project %q is not defined in the provider's api_tokens attribute, which is empty: add an %q entry to api_tokens", project, project)
+		}
+		return nil, fmt.Errorf("project %q is not defined in the provider's api_tokens attribute: available keys are %s", project, strings.Join(keys, ", "))
+	}
+
+	scoped := *c
+	scoped.APIToken = token
+	return &scoped, nil
+}
+
+// parseImportID splits a resource import ID into its optional project key and
+// the resource ID. The compound form is "project/id" (for example
+// "store-one/334477"); an ID without "/" selects the default token (empty
+// project).
+func parseImportID(importID string) (project, id string) {
+	if before, after, found := strings.Cut(importID, "/"); found {
+		return before, after
+	}
+	return "", importID
+}
 
 // doRequest performs an authenticated request against the DatoCMS CMA,
 // handling the required headers, JSON:API error bodies and 429 rate-limit

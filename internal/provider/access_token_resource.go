@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -33,6 +32,7 @@ type AccessTokenResource struct {
 // AccessTokenResourceModel describes the resource data model.
 type AccessTokenResourceModel struct {
 	ID                  types.String `tfsdk:"id"`
+	Project             types.String `tfsdk:"project"`
 	Name                types.String `tfsdk:"name"`
 	RoleID              types.String `tfsdk:"role_id"`
 	CanAccessCda        types.Bool   `tfsdk:"can_access_cda"`
@@ -64,6 +64,7 @@ func (r *AccessTokenResource) Schema(ctx context.Context, req resource.SchemaReq
 				Required:            true,
 				MarkdownDescription: "Name of the API token. UI: \"Name\".",
 			},
+			"project": projectAttribute(),
 			"role_id": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "ID of the role associated with the token, typically referencing a `datocms_role` resource. Required: the CMA rejects a null role linkage on both create and update (422 INVALID_FORMAT), so every token must reference a role. The token's effective permissions are the intersection of this role and the `can_access_*` surface flags. UI: Permissions > \"Role associated with this API token\" select.",
@@ -165,7 +166,12 @@ func (r *AccessTokenResource) Create(ctx context.Context, req resource.CreateReq
 
 	attrs, roleID := accessTokenAttributesFromModel(&data)
 
-	accessToken, err := r.client.CreateAccessToken(ctx, attrs, roleID)
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	accessToken, err := client.CreateAccessToken(ctx, attrs, roleID)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating DatoCMS access token", err.Error())
 		return
@@ -188,7 +194,12 @@ func (r *AccessTokenResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	accessToken, err := r.client.GetAccessToken(ctx, data.ID.ValueString())
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	accessToken, err := client.GetAccessToken(ctx, data.ID.ValueString())
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			resp.State.RemoveResource(ctx)
@@ -213,7 +224,12 @@ func (r *AccessTokenResource) Update(ctx context.Context, req resource.UpdateReq
 
 	attrs, roleID := accessTokenAttributesFromModel(&data)
 
-	if _, err := r.client.UpdateAccessToken(ctx, data.ID.ValueString(), attrs, roleID); err != nil {
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	if _, err := client.UpdateAccessToken(ctx, data.ID.ValueString(), attrs, roleID); err != nil {
 		resp.Diagnostics.AddError("Error updating DatoCMS access token", err.Error())
 		return
 	}
@@ -231,7 +247,12 @@ func (r *AccessTokenResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	if err := r.client.DeleteAccessToken(ctx, data.ID.ValueString()); err != nil {
+	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
+	if client == nil {
+		return
+	}
+
+	if err := client.DeleteAccessToken(ctx, data.ID.ValueString()); err != nil {
 		if errors.Is(err, errNotFound) {
 			return
 		}
@@ -240,5 +261,5 @@ func (r *AccessTokenResource) Delete(ctx context.Context, req resource.DeleteReq
 }
 
 func (r *AccessTokenResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	importStateWithProject(ctx, req, resp)
 }

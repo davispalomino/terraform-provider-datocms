@@ -33,14 +33,18 @@ type DatoCMSProvider struct {
 
 // DatoCMSProviderModel describes the provider data model.
 type DatoCMSProviderModel struct {
-	APIToken types.String `tfsdk:"api_token"`
-	BaseURL  types.String `tfsdk:"base_url"`
+	APIToken  types.String `tfsdk:"api_token"`
+	APITokens types.Map    `tfsdk:"api_tokens"`
+	BaseURL   types.String `tfsdk:"base_url"`
 }
 
 // DatoCMSClient holds the configured API client data shared with resources
-// and data sources.
+// and data sources. APIToken is the default token, used by resources that do
+// not set the project attribute; APITokens maps project keys (as declared in
+// the api_tokens provider attribute) to their tokens.
 type DatoCMSClient struct {
 	APIToken   string
+	APITokens  map[string]string
 	BaseURL    string
 	HTTPClient *http.Client
 }
@@ -55,7 +59,13 @@ func (p *DatoCMSProvider) Schema(ctx context.Context, req provider.SchemaRequest
 		MarkdownDescription: "Interact with the DatoCMS Content Management API. All requests are sent with `X-Api-Version: 3` (the current CMA version); the resource schemas were validated against the official CMA hyperschema (https://site-api.datocms.com/docs/site-api-hyperschema.json) on 2026-08-20. DatoCMS introduces breaking changes only with a new API version, so a future API version may require a new release of this provider.",
 		Attributes: map[string]schema.Attribute{
 			"api_token": schema.StringAttribute{
-				MarkdownDescription: "DatoCMS API token. Can also be set via the `DATOCMS_API_TOKEN` environment variable.",
+				MarkdownDescription: "Default DatoCMS API token, used by resources that do not set the `project` attribute. Can also be set via the `DATOCMS_API_TOKEN` environment variable.",
+				Optional:            true,
+				Sensitive:           true,
+			},
+			"api_tokens": schema.MapAttribute{
+				ElementType:         types.StringType,
+				MarkdownDescription: "Map of project keys to DatoCMS API tokens, to manage multiple DatoCMS projects from a single provider configuration. Resources select an entry through their `project` attribute; the map key is an arbitrary label of your choice (for example the project name). Resources without a `project` attribute keep using `api_token`/`DATOCMS_API_TOKEN`.",
 				Optional:            true,
 				Sensitive:           true,
 			},
@@ -103,10 +113,18 @@ func (p *DatoCMSProvider) Configure(ctx context.Context, req provider.ConfigureR
 		apiToken = data.APIToken.ValueString()
 	}
 
-	if apiToken == "" {
+	apiTokens := map[string]string{}
+	if !data.APITokens.IsNull() && !data.APITokens.IsUnknown() {
+		resp.Diagnostics.Append(data.APITokens.ElementsAs(ctx, &apiTokens, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	if apiToken == "" && len(apiTokens) == 0 {
 		resp.Diagnostics.AddError(
 			"Missing DatoCMS API token",
-			"Set the api_token provider attribute or the DATOCMS_API_TOKEN environment variable.",
+			"Set the api_token provider attribute (or the DATOCMS_API_TOKEN environment variable), or configure per-project tokens with the api_tokens attribute.",
 		)
 		return
 	}
@@ -127,6 +145,7 @@ func (p *DatoCMSProvider) Configure(ctx context.Context, req provider.ConfigureR
 
 	client := &DatoCMSClient{
 		APIToken:   apiToken,
+		APITokens:  apiTokens,
 		BaseURL:    baseURL,
 		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 	}

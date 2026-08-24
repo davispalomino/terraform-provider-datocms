@@ -124,6 +124,51 @@ The provider needs a DatoCMS full-access (or suitably scoped) API token, created
 
 - The `api_token` provider argument, which takes precedence over the environment variable.
 
+## Managing multiple projects
+
+A single provider configuration can manage several DatoCMS projects. Declare one token per project in the `api_tokens` map (the keys are arbitrary labels of your choice) and select the project on each resource with the `project` attribute:
+
+```terraform
+provider "datocms" {
+  api_tokens = {
+    "store-one" = var.datocms_api_token_store_one
+    "store-two" = var.datocms_api_token_store_two
+  }
+}
+
+resource "datocms_role" "store_one_editor" {
+  project = "store-one"
+  name    = "content_editor"
+}
+```
+
+Resources without a `project` attribute keep using the default token (`api_token` or `DATOCMS_API_TOKEN`), so existing configurations are unaffected. Changing `project` on an existing resource forces its replacement, since each key targets a different DatoCMS project.
+
+This works well with `for_each` to apply the same configuration to every project:
+
+```terraform
+module "datocms_project" {
+  source   = "./modules/datocms-project"
+  for_each = toset(["store-one", "store-two"])
+
+  project = each.key
+}
+
+# Inside the module:
+resource "datocms_role" "editor" {
+  project = var.project
+  name    = "content_editor"
+}
+```
+
+To import a resource that lives in one of the `api_tokens` projects, prefix the import ID with the project key:
+
+```shell
+terraform import datocms_role.store_one_editor store-one/000003
+```
+
+An import ID without `/` imports the resource using the default token.
+
 ## DatoCMS API compatibility
 
 - The provider sends `X-Api-Version: 3` on every request (hardcoded in the API client). Version 3 is the current version of the [Content Management API](https://www.datocms.com/docs/content-management-api), and the header is mandatory on every CMA call per the official [API versioning policy](https://www.datocms.com/docs/content-management-api/api-versioning).
