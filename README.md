@@ -76,7 +76,7 @@ Attribute names follow the Content Management API, while the DatoCMS UI groups t
 | Activity tracking | `can_access_build_events_log`, `can_access_search_index_events_log`, `can_access_audit_log` |
 | Environment access (two toggles) | `environments_access` (`all`, `primary_only`, `sandbox_only`, `none`) |
 | Environment permissions | `can_edit_favicon`, `can_manage_menu`, `can_edit_schema`, `can_edit_environment`, `can_manage_workflows`, `can_manage_shared_filters`, `can_manage_upload_collections` |
-| Content permissions (records and assets) | `positive_item_type_permissions`, `negative_item_type_permissions`, `positive_upload_permissions`, `negative_upload_permissions` |
+| Content permissions (records and assets) | `positive_item_type_permissions`, `negative_item_type_permissions`, `positive_upload_permissions`, `negative_upload_permissions` (omitted = preserved as-is on the platform; declare them, even as `[]`, to manage them) |
 | Build permissions | `positive_build_trigger_permissions`, `negative_build_trigger_permissions` |
 | Permissions to index with Search Indexes | `positive_search_index_permissions`, `negative_search_index_permissions` |
 | Inherits permissions from | `inherits_permissions_from` |

@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/defaults"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -161,10 +162,12 @@ func emptyListDefault(elemType attr.Type) defaults.List {
 
 func itemTypePermissionsAttribute(polarity string) schema.ListNestedAttribute {
 	return schema.ListNestedAttribute{
-		Optional:            true,
-		Computed:            true,
-		Default:             emptyListDefault(itemTypePermissionObjectType),
-		MarkdownDescription: "Item type (model) permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. UI: Content permissions > \"Records and assets permissions\".",
+		Optional: true,
+		Computed: true,
+		PlanModifiers: []planmodifier.List{
+			listplanmodifier.UseStateForUnknown(),
+		},
+		MarkdownDescription: "Item type (model) permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > \"Records and assets permissions\".",
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
 				"action": schema.StringAttribute{
@@ -219,10 +222,12 @@ func itemTypePermissionsAttribute(polarity string) schema.ListNestedAttribute {
 
 func uploadPermissionsAttribute(polarity string) schema.ListNestedAttribute {
 	return schema.ListNestedAttribute{
-		Optional:            true,
-		Computed:            true,
-		Default:             emptyListDefault(uploadPermissionObjectType),
-		MarkdownDescription: "Upload permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. UI: Content permissions > \"Records and assets permissions\" (media area).",
+		Optional: true,
+		Computed: true,
+		PlanModifiers: []planmodifier.List{
+			listplanmodifier.UseStateForUnknown(),
+		},
+		MarkdownDescription: "Upload permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > \"Records and assets permissions\" (media area).",
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
 				"action": schema.StringAttribute{
@@ -303,7 +308,7 @@ func searchIndexPermissionsAttribute(polarity string) schema.ListNestedAttribute
 
 func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages a DatoCMS role (UI: Settings > Roles). A role bundles the project-level capabilities shown as toggles in the \"Create a new role\" screen (`can_*` flags), the environment access selector, granular record/asset permission rules, manual build trigger and search index permission rules, and role inheritance. Each attribute description below points to the corresponding toggle in the DatoCMS UI. On update the permission arrays are replaced wholesale, and negative permissions always take precedence over positive ones.",
+		MarkdownDescription: "Manages a DatoCMS role (UI: Settings > Roles). A role bundles the project-level capabilities shown as toggles in the \"Create a new role\" screen (`can_*` flags), the environment access selector, granular record/asset permission rules, manual build trigger and search index permission rules, and role inheritance. Each attribute description below points to the corresponding toggle in the DatoCMS UI. Declared permission arrays are replaced wholesale on update, and negative permissions always take precedence over positive ones. The four item/upload permission lists (`positive_item_type_permissions`, `negative_item_type_permissions`, `positive_upload_permissions`, `negative_upload_permissions`) are preserved as-is on the platform when omitted from the configuration; declare them (even as `[]`) to have Terraform manage them.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -399,8 +404,11 @@ func stringFromPtr(p *string) types.String {
 }
 
 // roleAttributesFromModel converts the Terraform plan/state model into the
-// full JSON:API attribute set plus the list of inherited role IDs. The full
-// set is always sent (the API replaces permission arrays wholesale).
+// JSON:API attribute set plus the list of inherited role IDs. Every attribute
+// is sent except the four item/upload permission lists when they are null or
+// unknown in the model: those stay nil so the request omits them and DatoCMS
+// leaves them unchanged (declared lists, including empty ones, are sent and
+// replaced wholesale).
 func roleAttributesFromModel(ctx context.Context, data *RoleResourceModel) (roleAttributes, []string, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
@@ -429,21 +437,33 @@ func roleAttributesFromModel(ctx context.Context, data *RoleResourceModel) (role
 		EnvironmentsAccess:            stringPtr(data.EnvironmentsAccess),
 	}
 
-	var itemTypeModels []itemTypePermissionModel
-	diags.Append(data.PositiveItemTypePermissions.ElementsAs(ctx, &itemTypeModels, false)...)
-	attrs.PositiveItemTypePermissions = itemTypePermissionsFromModels(itemTypeModels)
+	if isKnownList(data.PositiveItemTypePermissions) {
+		var itemTypeModels []itemTypePermissionModel
+		diags.Append(data.PositiveItemTypePermissions.ElementsAs(ctx, &itemTypeModels, false)...)
+		perms := itemTypePermissionsFromModels(itemTypeModels)
+		attrs.PositiveItemTypePermissions = &perms
+	}
 
-	itemTypeModels = nil
-	diags.Append(data.NegativeItemTypePermissions.ElementsAs(ctx, &itemTypeModels, false)...)
-	attrs.NegativeItemTypePermissions = itemTypePermissionsFromModels(itemTypeModels)
+	if isKnownList(data.NegativeItemTypePermissions) {
+		var itemTypeModels []itemTypePermissionModel
+		diags.Append(data.NegativeItemTypePermissions.ElementsAs(ctx, &itemTypeModels, false)...)
+		perms := itemTypePermissionsFromModels(itemTypeModels)
+		attrs.NegativeItemTypePermissions = &perms
+	}
 
-	var uploadModels []uploadPermissionModel
-	diags.Append(data.PositiveUploadPermissions.ElementsAs(ctx, &uploadModels, false)...)
-	attrs.PositiveUploadPermissions = uploadPermissionsFromModels(uploadModels)
+	if isKnownList(data.PositiveUploadPermissions) {
+		var uploadModels []uploadPermissionModel
+		diags.Append(data.PositiveUploadPermissions.ElementsAs(ctx, &uploadModels, false)...)
+		perms := uploadPermissionsFromModels(uploadModels)
+		attrs.PositiveUploadPermissions = &perms
+	}
 
-	uploadModels = nil
-	diags.Append(data.NegativeUploadPermissions.ElementsAs(ctx, &uploadModels, false)...)
-	attrs.NegativeUploadPermissions = uploadPermissionsFromModels(uploadModels)
+	if isKnownList(data.NegativeUploadPermissions) {
+		var uploadModels []uploadPermissionModel
+		diags.Append(data.NegativeUploadPermissions.ElementsAs(ctx, &uploadModels, false)...)
+		perms := uploadPermissionsFromModels(uploadModels)
+		attrs.NegativeUploadPermissions = &perms
+	}
 
 	var buildTriggerModels []buildTriggerPermissionModel
 	diags.Append(data.PositiveBuildTriggerPermissions.ElementsAs(ctx, &buildTriggerModels, false)...)
@@ -517,6 +537,81 @@ func searchIndexPermissionsFromModels(models []searchIndexPermissionModel) []rol
 	return out
 }
 
+// isKnownList reports whether a list attribute carries a concrete value
+// (declared in configuration or resolved from state), as opposed to being
+// null (omitted) or unknown (omitted on create).
+func isKnownList(l types.List) bool {
+	return !l.IsNull() && !l.IsUnknown()
+}
+
+// completeContentPermissionPairs fills the missing half of a partially
+// declared item/upload permission pair with an empty list. The DatoCMS API
+// requires both halves of each positive/negative pair to be both present or
+// both absent (POSITIVE_AND_NEGATIVE_ITEM_TYPE_PERMISSIONS_MUST_BE_BOTH_
+// PRESENT_OR_BOTH_ABSENT). Used on create, where there is nothing to
+// preserve yet.
+func completeContentPermissionPairs(attrs *roleAttributes) {
+	if (attrs.PositiveItemTypePermissions == nil) != (attrs.NegativeItemTypePermissions == nil) {
+		empty := []roleItemTypePermission{}
+		if attrs.PositiveItemTypePermissions == nil {
+			attrs.PositiveItemTypePermissions = &empty
+		} else {
+			attrs.NegativeItemTypePermissions = &empty
+		}
+	}
+	if (attrs.PositiveUploadPermissions == nil) != (attrs.NegativeUploadPermissions == nil) {
+		empty := []roleUploadPermission{}
+		if attrs.PositiveUploadPermissions == nil {
+			attrs.PositiveUploadPermissions = &empty
+		} else {
+			attrs.NegativeUploadPermissions = &empty
+		}
+	}
+}
+
+// derefPermissions turns the API's pointer-to-slice permission lists back
+// into plain slices (nil pointer means an empty list in responses).
+func derefPermissions[T any](p *[]T) []T {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+func itemTypeModelsFromAPI(perms []roleItemTypePermission) []itemTypePermissionModel {
+	out := make([]itemTypePermissionModel, 0, len(perms))
+	for _, p := range perms {
+		out = append(out, itemTypePermissionModel{
+			Action:            types.StringValue(p.Action),
+			Environment:       stringFromPtr(p.Environment),
+			ItemType:          stringFromPtr(p.ItemType),
+			Workflow:          stringFromPtr(p.Workflow),
+			OnStage:           stringFromPtr(p.OnStage),
+			ToStage:           stringFromPtr(p.ToStage),
+			OnCreator:         stringFromPtr(p.OnCreator),
+			LocalizationScope: stringFromPtr(p.LocalizationScope),
+			Locale:            stringFromPtr(p.Locale),
+		})
+	}
+	return out
+}
+
+func uploadModelsFromAPI(perms []roleUploadPermission) []uploadPermissionModel {
+	out := make([]uploadPermissionModel, 0, len(perms))
+	for _, p := range perms {
+		out = append(out, uploadPermissionModel{
+			Action:                 types.StringValue(p.Action),
+			Environment:            stringFromPtr(p.Environment),
+			UploadCollection:       stringFromPtr(p.UploadCollection),
+			MoveToUploadCollection: stringFromPtr(p.MoveToUploadCollection),
+			OnCreator:              stringFromPtr(p.OnCreator),
+			LocalizationScope:      stringFromPtr(p.LocalizationScope),
+			Locale:                 stringFromPtr(p.Locale),
+		})
+	}
+	return out
+}
+
 // modelFromRole maps a role API response onto the resource model.
 func modelFromRole(ctx context.Context, role *roleData, data *RoleResourceModel) diag.Diagnostics {
 	var diags diag.Diagnostics
@@ -546,40 +641,6 @@ func modelFromRole(ctx context.Context, role *roleData, data *RoleResourceModel)
 	data.CanAccessSearchIndexEventsLog = types.BoolValue(a.CanAccessSearchIndexEventsLog)
 	data.EnvironmentsAccess = stringFromPtr(a.EnvironmentsAccess)
 
-	itemTypeModelsFor := func(perms []roleItemTypePermission) []itemTypePermissionModel {
-		out := make([]itemTypePermissionModel, 0, len(perms))
-		for _, p := range perms {
-			out = append(out, itemTypePermissionModel{
-				Action:            types.StringValue(p.Action),
-				Environment:       stringFromPtr(p.Environment),
-				ItemType:          stringFromPtr(p.ItemType),
-				Workflow:          stringFromPtr(p.Workflow),
-				OnStage:           stringFromPtr(p.OnStage),
-				ToStage:           stringFromPtr(p.ToStage),
-				OnCreator:         stringFromPtr(p.OnCreator),
-				LocalizationScope: stringFromPtr(p.LocalizationScope),
-				Locale:            stringFromPtr(p.Locale),
-			})
-		}
-		return out
-	}
-
-	uploadModelsFor := func(perms []roleUploadPermission) []uploadPermissionModel {
-		out := make([]uploadPermissionModel, 0, len(perms))
-		for _, p := range perms {
-			out = append(out, uploadPermissionModel{
-				Action:                 types.StringValue(p.Action),
-				Environment:            stringFromPtr(p.Environment),
-				UploadCollection:       stringFromPtr(p.UploadCollection),
-				MoveToUploadCollection: stringFromPtr(p.MoveToUploadCollection),
-				OnCreator:              stringFromPtr(p.OnCreator),
-				LocalizationScope:      stringFromPtr(p.LocalizationScope),
-				Locale:                 stringFromPtr(p.Locale),
-			})
-		}
-		return out
-	}
-
 	buildTriggerModelsFor := func(perms []roleBuildTriggerPermission) []buildTriggerPermissionModel {
 		out := make([]buildTriggerPermissionModel, 0, len(perms))
 		for _, p := range perms {
@@ -597,13 +658,13 @@ func modelFromRole(ctx context.Context, role *roleData, data *RoleResourceModel)
 	}
 
 	var d diag.Diagnostics
-	data.PositiveItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFor(a.PositiveItemTypePermissions))
+	data.PositiveItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(a.PositiveItemTypePermissions)))
 	diags.Append(d...)
-	data.NegativeItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFor(a.NegativeItemTypePermissions))
+	data.NegativeItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(a.NegativeItemTypePermissions)))
 	diags.Append(d...)
-	data.PositiveUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFor(a.PositiveUploadPermissions))
+	data.PositiveUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(a.PositiveUploadPermissions)))
 	diags.Append(d...)
-	data.NegativeUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFor(a.NegativeUploadPermissions))
+	data.NegativeUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(a.NegativeUploadPermissions)))
 	diags.Append(d...)
 	data.PositiveBuildTriggerPermissions, d = types.ListValueFrom(ctx, buildTriggerPermissionObjectType, buildTriggerModelsFor(a.PositiveBuildTriggerPermissions))
 	diags.Append(d...)
@@ -642,6 +703,10 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	// The API rejects a partially declared item/upload pair; on create the
+	// undeclared half becomes [] (a brand new role has nothing to preserve).
+	completeContentPermissionPairs(&attrs)
+
 	client := clientForProject(r.client, data.Project, &resp.Diagnostics)
 	if client == nil {
 		return
@@ -656,10 +721,34 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 	data.ID = types.StringValue(role.ID)
 	// environments_access has no documented API default: when omitted from
 	// the configuration its planned value is unknown, so store whatever the
-	// API returned. All other attributes keep the planned values (defaults
-	// make them concrete, and the API accepts arrays wholesale).
+	// API returned. The same goes for the four item/upload permission lists:
+	// when omitted they are unknown in the plan (they were not sent in the
+	// request), so the state takes whatever the API returned. All other
+	// attributes keep the planned values (defaults make them concrete, and
+	// the API accepts arrays wholesale).
 	if data.EnvironmentsAccess.IsUnknown() {
 		data.EnvironmentsAccess = stringFromPtr(role.Attributes.EnvironmentsAccess)
+	}
+
+	var d diag.Diagnostics
+	if data.PositiveItemTypePermissions.IsUnknown() {
+		data.PositiveItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(role.Attributes.PositiveItemTypePermissions)))
+		resp.Diagnostics.Append(d...)
+	}
+	if data.NegativeItemTypePermissions.IsUnknown() {
+		data.NegativeItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(role.Attributes.NegativeItemTypePermissions)))
+		resp.Diagnostics.Append(d...)
+	}
+	if data.PositiveUploadPermissions.IsUnknown() {
+		data.PositiveUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(role.Attributes.PositiveUploadPermissions)))
+		resp.Diagnostics.Append(d...)
+	}
+	if data.NegativeUploadPermissions.IsUnknown() {
+		data.NegativeUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(role.Attributes.NegativeUploadPermissions)))
+		resp.Diagnostics.Append(d...)
+	}
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -697,9 +786,10 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 }
 
 func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data RoleResourceModel
+	var data, config RoleResourceModel
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -708,6 +798,23 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// Item/upload permission lists omitted from the configuration are not
+	// sent on update either: the DatoCMS API leaves omitted attributes
+	// unchanged, so whatever the platform has is preserved. The API requires
+	// both halves of each positive/negative pair to be both present or both
+	// absent, so a pair is omitted only when BOTH halves are undeclared;
+	// when only one half is declared, the other is sent with its planned
+	// value, which comes from state via UseStateForUnknown (the last
+	// refreshed platform value, i.e. still effectively preserved).
+	if config.PositiveItemTypePermissions.IsNull() && config.NegativeItemTypePermissions.IsNull() {
+		attrs.PositiveItemTypePermissions = nil
+		attrs.NegativeItemTypePermissions = nil
+	}
+	if config.PositiveUploadPermissions.IsNull() && config.NegativeUploadPermissions.IsNull() {
+		attrs.PositiveUploadPermissions = nil
+		attrs.NegativeUploadPermissions = nil
 	}
 
 	client := clientForProject(r.client, data.Project, &resp.Diagnostics)

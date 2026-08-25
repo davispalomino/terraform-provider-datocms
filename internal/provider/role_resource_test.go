@@ -196,7 +196,8 @@ func TestRoleAttributesFromModel_Payload(t *testing.T) {
 		t.Errorf("unexpected search index permission: %v", siPerms[0])
 	}
 
-	// Empty arrays must serialize as [], not null (wholesale replacement).
+	// Declared empty arrays must serialize as [], not null (wholesale
+	// replacement / clear).
 	for _, field := range []string{
 		"negative_item_type_permissions", "negative_upload_permissions",
 		"negative_build_trigger_permissions", "negative_search_index_permissions",
@@ -220,6 +221,140 @@ func TestRoleAttributesFromModel_Payload(t *testing.T) {
 	linkage := mustAssert[map[string]any](t, linkages[0])
 	if linkage["type"] != "role" || linkage["id"] != "000001" {
 		t.Errorf("unexpected linkage: %v", linkage)
+	}
+}
+
+// TestRoleAttributesFromModel_OmittedContentListsAreNotSent covers the
+// "preserve content permissions" semantics: item/upload permission lists that
+// are null (omitted on update) or unknown (omitted on create) in the model
+// must be absent from the JSON payload so the API leaves them unchanged.
+func TestRoleAttributesFromModel_OmittedContentListsAreNotSent(t *testing.T) {
+	ctx := context.Background()
+
+	for name, listValue := range map[string]func() types.List{
+		"null": func() types.List { return types.ListNull(itemTypePermissionObjectType) },
+		"unknown": func() types.List {
+			return types.ListUnknown(itemTypePermissionObjectType)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			model := RoleResourceModel{Name: types.StringValue("developer")}
+			emptyRoleModelLists(&model)
+			model.PositiveItemTypePermissions = listValue()
+			if name == "null" {
+				model.NegativeItemTypePermissions = types.ListNull(itemTypePermissionObjectType)
+				model.PositiveUploadPermissions = types.ListNull(uploadPermissionObjectType)
+				model.NegativeUploadPermissions = types.ListNull(uploadPermissionObjectType)
+			} else {
+				model.NegativeItemTypePermissions = types.ListUnknown(itemTypePermissionObjectType)
+				model.PositiveUploadPermissions = types.ListUnknown(uploadPermissionObjectType)
+				model.NegativeUploadPermissions = types.ListUnknown(uploadPermissionObjectType)
+			}
+
+			attrs, _, diags := roleAttributesFromModel(ctx, &model)
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %v", diags)
+			}
+
+			raw, err := json.Marshal(attrs)
+			if err != nil {
+				t.Fatalf("marshaling attributes: %v", err)
+			}
+			var a map[string]any
+			if err := json.Unmarshal(raw, &a); err != nil {
+				t.Fatalf("unmarshaling attributes: %v", err)
+			}
+
+			for _, field := range []string{
+				"positive_item_type_permissions", "negative_item_type_permissions",
+				"positive_upload_permissions", "negative_upload_permissions",
+			} {
+				if v, ok := a[field]; ok {
+					t.Errorf("expected %s to be omitted from the payload, got %v", field, v)
+				}
+			}
+			// Build trigger and search index lists are first-screen managed
+			// lists and must still be sent (as [] here).
+			for _, field := range []string{
+				"positive_build_trigger_permissions", "negative_build_trigger_permissions",
+				"positive_search_index_permissions", "negative_search_index_permissions",
+			} {
+				v, ok := a[field]
+				if !ok || v == nil {
+					t.Errorf("expected %s to serialize as [], got %v (present=%v)", field, v, ok)
+				}
+			}
+		})
+	}
+}
+
+// TestCompleteContentPermissionPairs covers the API constraint that the
+// positive and negative halves of each item/upload pair must be both
+// present or both absent: a partially declared pair gets its missing half
+// filled with [], while fully absent pairs stay absent.
+func TestCompleteContentPermissionPairs(t *testing.T) {
+	item := []roleItemTypePermission{{Action: "all"}}
+	upload := []roleUploadPermission{{Action: "read"}}
+
+	attrs := roleAttributes{
+		PositiveItemTypePermissions: &item,
+		NegativeUploadPermissions:   &upload,
+	}
+	completeContentPermissionPairs(&attrs)
+
+	if attrs.NegativeItemTypePermissions == nil || len(*attrs.NegativeItemTypePermissions) != 0 {
+		t.Errorf("negative item half not completed with []: %v", attrs.NegativeItemTypePermissions)
+	}
+	if attrs.PositiveUploadPermissions == nil || len(*attrs.PositiveUploadPermissions) != 0 {
+		t.Errorf("positive upload half not completed with []: %v", attrs.PositiveUploadPermissions)
+	}
+	if len(*attrs.PositiveItemTypePermissions) != 1 || len(*attrs.NegativeUploadPermissions) != 1 {
+		t.Errorf("declared halves must be untouched")
+	}
+
+	var absent roleAttributes
+	completeContentPermissionPairs(&absent)
+	if absent.PositiveItemTypePermissions != nil || absent.NegativeItemTypePermissions != nil ||
+		absent.PositiveUploadPermissions != nil || absent.NegativeUploadPermissions != nil {
+		t.Errorf("fully absent pairs must stay absent: %+v", absent)
+	}
+}
+
+// TestRoleAttributesFromModel_DeclaredEmptyContentListsAreSent ensures that
+// explicitly declared empty lists are still sent as [] (managed, wholesale
+// clear), not omitted.
+func TestRoleAttributesFromModel_DeclaredEmptyContentListsAreSent(t *testing.T) {
+	ctx := context.Background()
+
+	model := RoleResourceModel{Name: types.StringValue("developer")}
+	emptyRoleModelLists(&model)
+
+	attrs, _, diags := roleAttributesFromModel(ctx, &model)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	raw, err := json.Marshal(attrs)
+	if err != nil {
+		t.Fatalf("marshaling attributes: %v", err)
+	}
+	var a map[string]any
+	if err := json.Unmarshal(raw, &a); err != nil {
+		t.Fatalf("unmarshaling attributes: %v", err)
+	}
+
+	for _, field := range []string{
+		"positive_item_type_permissions", "negative_item_type_permissions",
+		"positive_upload_permissions", "negative_upload_permissions",
+	} {
+		v, ok := a[field]
+		if !ok || v == nil {
+			t.Errorf("expected %s to serialize as an empty array, got %v (present=%v)", field, v, ok)
+			continue
+		}
+		if arr := mustAssert[[]any](t, v); len(arr) != 0 {
+			t.Errorf("%s length = %d, want 0", field, len(arr))
+		}
 	}
 }
 

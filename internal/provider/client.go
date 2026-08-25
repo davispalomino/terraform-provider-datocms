@@ -195,32 +195,37 @@ type roleSearchIndexPermission struct {
 
 // roleAttributes mirrors the role attributes object of the CMA.
 type roleAttributes struct {
-	Name                            string                       `json:"name"`
-	CanEditSite                     bool                         `json:"can_edit_site"`
-	CanEditFavicon                  bool                         `json:"can_edit_favicon"`
-	CanEditSchema                   bool                         `json:"can_edit_schema"`
-	CanManageMenu                   bool                         `json:"can_manage_menu"`
-	CanEditEnvironment              bool                         `json:"can_edit_environment"`
-	CanPromoteEnvironments          bool                         `json:"can_promote_environments"`
-	CanManageEnvironments           bool                         `json:"can_manage_environments"`
-	CanManageUsers                  bool                         `json:"can_manage_users"`
-	CanManageSharedFilters          bool                         `json:"can_manage_shared_filters"`
-	CanManageSearchIndexes          bool                         `json:"can_manage_search_indexes"`
-	CanManageUploadCollections      bool                         `json:"can_manage_upload_collections"`
-	CanManageBuildTriggers          bool                         `json:"can_manage_build_triggers"`
-	CanManageWebhooks               bool                         `json:"can_manage_webhooks"`
-	CanManageSSO                    bool                         `json:"can_manage_sso"`
-	CanManageWorkflows              bool                         `json:"can_manage_workflows"`
-	CanManageAccessTokens           bool                         `json:"can_manage_access_tokens"`
-	CanAccessAuditLog               bool                         `json:"can_access_audit_log"`
-	CanPerformSiteSearch            bool                         `json:"can_perform_site_search"`
-	CanAccessBuildEventsLog         bool                         `json:"can_access_build_events_log"`
-	CanAccessSearchIndexEventsLog   bool                         `json:"can_access_search_index_events_log"`
-	EnvironmentsAccess              *string                      `json:"environments_access,omitempty"`
-	PositiveItemTypePermissions     []roleItemTypePermission     `json:"positive_item_type_permissions"`
-	NegativeItemTypePermissions     []roleItemTypePermission     `json:"negative_item_type_permissions"`
-	PositiveUploadPermissions       []roleUploadPermission       `json:"positive_upload_permissions"`
-	NegativeUploadPermissions       []roleUploadPermission       `json:"negative_upload_permissions"`
+	Name                          string  `json:"name"`
+	CanEditSite                   bool    `json:"can_edit_site"`
+	CanEditFavicon                bool    `json:"can_edit_favicon"`
+	CanEditSchema                 bool    `json:"can_edit_schema"`
+	CanManageMenu                 bool    `json:"can_manage_menu"`
+	CanEditEnvironment            bool    `json:"can_edit_environment"`
+	CanPromoteEnvironments        bool    `json:"can_promote_environments"`
+	CanManageEnvironments         bool    `json:"can_manage_environments"`
+	CanManageUsers                bool    `json:"can_manage_users"`
+	CanManageSharedFilters        bool    `json:"can_manage_shared_filters"`
+	CanManageSearchIndexes        bool    `json:"can_manage_search_indexes"`
+	CanManageUploadCollections    bool    `json:"can_manage_upload_collections"`
+	CanManageBuildTriggers        bool    `json:"can_manage_build_triggers"`
+	CanManageWebhooks             bool    `json:"can_manage_webhooks"`
+	CanManageSSO                  bool    `json:"can_manage_sso"`
+	CanManageWorkflows            bool    `json:"can_manage_workflows"`
+	CanManageAccessTokens         bool    `json:"can_manage_access_tokens"`
+	CanAccessAuditLog             bool    `json:"can_access_audit_log"`
+	CanPerformSiteSearch          bool    `json:"can_perform_site_search"`
+	CanAccessBuildEventsLog       bool    `json:"can_access_build_events_log"`
+	CanAccessSearchIndexEventsLog bool    `json:"can_access_search_index_events_log"`
+	EnvironmentsAccess            *string `json:"environments_access,omitempty"`
+	// The four item/upload permission lists are pointers so that a nil
+	// value omits the attribute from the request entirely: the DatoCMS
+	// update API leaves omitted attributes unchanged, which is how omitted
+	// (null) configuration lists are preserved. A pointer to an empty
+	// slice still serializes as [] (wholesale clear).
+	PositiveItemTypePermissions     *[]roleItemTypePermission    `json:"positive_item_type_permissions,omitempty"`
+	NegativeItemTypePermissions     *[]roleItemTypePermission    `json:"negative_item_type_permissions,omitempty"`
+	PositiveUploadPermissions       *[]roleUploadPermission      `json:"positive_upload_permissions,omitempty"`
+	NegativeUploadPermissions       *[]roleUploadPermission      `json:"negative_upload_permissions,omitempty"`
 	PositiveBuildTriggerPermissions []roleBuildTriggerPermission `json:"positive_build_trigger_permissions"`
 	NegativeBuildTriggerPermissions []roleBuildTriggerPermission `json:"negative_build_trigger_permissions"`
 	PositiveSearchIndexPermissions  []roleSearchIndexPermission  `json:"positive_search_index_permissions"`
