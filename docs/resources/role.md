@@ -3,12 +3,12 @@
 page_title: "datocms_role Resource - datocms"
 subcategory: ""
 description: |-
-  Manages a DatoCMS role (UI: Settings > Roles). A role bundles the project-level capabilities shown as toggles in the "Create a new role" screen (can_* flags), the environment access selector, granular record/asset permission rules, manual build trigger and search index permission rules, and role inheritance. Each attribute description below points to the corresponding toggle in the DatoCMS UI. On update the permission arrays are replaced wholesale, and negative permissions always take precedence over positive ones.
+  Manages a DatoCMS role (UI: Settings > Roles). A role bundles the project-level capabilities shown as toggles in the "Create a new role" screen (can_* flags), the environment access selector, granular record/asset permission rules, manual build trigger and search index permission rules, and role inheritance. Each attribute description below points to the corresponding toggle in the DatoCMS UI. Declared permission arrays are replaced wholesale on update, and negative permissions always take precedence over positive ones. The four item/upload permission lists (positive_item_type_permissions, negative_item_type_permissions, positive_upload_permissions, negative_upload_permissions) are preserved as-is on the platform when omitted from the configuration; declare them (even as []) to have Terraform manage them.
 ---
 
 # datocms_role (Resource)
 
-Manages a DatoCMS role (UI: Settings > Roles). A role bundles the project-level capabilities shown as toggles in the "Create a new role" screen (`can_*` flags), the environment access selector, granular record/asset permission rules, manual build trigger and search index permission rules, and role inheritance. Each attribute description below points to the corresponding toggle in the DatoCMS UI. On update the permission arrays are replaced wholesale, and negative permissions always take precedence over positive ones.
+Manages a DatoCMS role (UI: Settings > Roles). A role bundles the project-level capabilities shown as toggles in the "Create a new role" screen (`can_*` flags), the environment access selector, granular record/asset permission rules, manual build trigger and search index permission rules, and role inheritance. Each attribute description below points to the corresponding toggle in the DatoCMS UI. Declared permission arrays are replaced wholesale on update, and negative permissions always take precedence over positive ones. The four item/upload permission lists (`positive_item_type_permissions`, `negative_item_type_permissions`, `positive_upload_permissions`, `negative_upload_permissions`) are preserved as-is on the platform when omitted from the configuration; declare them (even as `[]`) to have Terraform manage them.
 
 ## Example Usage
 
@@ -94,7 +94,7 @@ resource "datocms_role" "store_developer" {
 
 ## Mapping from the DatoCMS UI
 
-The tables below map every toggle of the "Create a new role" screen in the DatoCMS UI to its Terraform attribute. The DatoCMS API documents no default for any role attribute; this provider defaults every `can_*` flag to `false` and every permission list to empty, so a role created with only `name` matches a role created in the UI with all toggles off.
+The tables below map every toggle of the "Create a new role" screen in the DatoCMS UI to its Terraform attribute. The DatoCMS API documents no default for any role attribute; this provider defaults every `can_*` flag to `false` and the build trigger, search index and inheritance lists to empty, so a role created with only `name` matches a role created in the UI with all toggles off. The four item/upload permission lists have no default: when omitted they are preserved as-is on the platform (see below).
 
 ### Project and environment management
 
@@ -159,7 +159,15 @@ The two UI toggles "On primary environment" and "On sandbox environments" map to
 | Permissions to index with Search Indexes > Add new rule | `positive_search_index_permissions` / `negative_search_index_permissions` | not documented |
 | Inherits permissions from (select) | `inherits_permissions_from` | not documented |
 
-Negative permissions always take precedence over positive ones. On update the API replaces each permission array wholesale; there is no merging.
+Negative permissions always take precedence over positive ones. On update the API replaces each declared permission array wholesale; there is no merging.
+
+### Preserving content permission rules (managing only the role form)
+
+The four item/upload permission lists (`positive_item_type_permissions`, `negative_item_type_permissions`, `positive_upload_permissions`, `negative_upload_permissions`) are special: when they are omitted from the configuration they are left untouched on the platform. Terraform then manages only the "first screen" of the role (the `can_*` flags, `environments_access`, build trigger and search index rules, and inheritance) while the record/asset rules keep being edited in the DatoCMS UI. This also works with `terraform import`: import a role, declare only the first-screen attributes, and the plan shows no changes while the content rules stay as they are.
+
+Declare a list, even as `[]`, to have Terraform manage it (an explicit `[]` clears it).
+
+Note: the DatoCMS API requires the positive and negative halves of each pair (item type, upload) to be sent together. When only one half of a pair is declared, the provider sends the other half too: with its current platform value on update (still effectively preserved) and as `[]` on create.
 
 <!-- schema generated by tfplugindocs -->
 ## Schema
@@ -200,13 +208,13 @@ Negative permissions always take precedence over positive ones. On update the AP
 | off | off | `none` |
 - `inherits_permissions_from` (List of String) IDs of the roles this role inherits permissions from. Inherited permissions are unioned with the role's own. UI: "Inherits permissions from" select.
 - `negative_build_trigger_permissions` (Attributes List) Build triggers the role can NOT trigger manually. A `null` `build_trigger` covers every build trigger. Creating/editing the triggers themselves is gated by `can_manage_build_triggers`. UI: Build permissions > "Add new rule". (see [below for nested schema](#nestedatt--negative_build_trigger_permissions))
-- `negative_item_type_permissions` (Attributes List) Item type (model) permissions denied for the role. Negative permissions take precedence over positive ones. UI: Content permissions > "Records and assets permissions". (see [below for nested schema](#nestedatt--negative_item_type_permissions))
+- `negative_item_type_permissions` (Attributes List) Item type (model) permissions denied for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > "Records and assets permissions". (see [below for nested schema](#nestedatt--negative_item_type_permissions))
 - `negative_search_index_permissions` (Attributes List) Search indexes the role can NOT re-index manually. A `null` `search_index` covers every index. Creating/editing the indexes themselves is gated by `can_manage_search_indexes`. UI: Permissions to index with Search Indexes > "Add new rule". (see [below for nested schema](#nestedatt--negative_search_index_permissions))
-- `negative_upload_permissions` (Attributes List) Upload permissions denied for the role. Negative permissions take precedence over positive ones. UI: Content permissions > "Records and assets permissions" (media area). (see [below for nested schema](#nestedatt--negative_upload_permissions))
+- `negative_upload_permissions` (Attributes List) Upload permissions denied for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > "Records and assets permissions" (media area). (see [below for nested schema](#nestedatt--negative_upload_permissions))
 - `positive_build_trigger_permissions` (Attributes List) Build triggers the role can  trigger manually. A `null` `build_trigger` covers every build trigger. Creating/editing the triggers themselves is gated by `can_manage_build_triggers`. UI: Build permissions > "Add new rule". (see [below for nested schema](#nestedatt--positive_build_trigger_permissions))
-- `positive_item_type_permissions` (Attributes List) Item type (model) permissions granted for the role. Negative permissions take precedence over positive ones. UI: Content permissions > "Records and assets permissions". (see [below for nested schema](#nestedatt--positive_item_type_permissions))
+- `positive_item_type_permissions` (Attributes List) Item type (model) permissions granted for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > "Records and assets permissions". (see [below for nested schema](#nestedatt--positive_item_type_permissions))
 - `positive_search_index_permissions` (Attributes List) Search indexes the role can  re-index manually. A `null` `search_index` covers every index. Creating/editing the indexes themselves is gated by `can_manage_search_indexes`. UI: Permissions to index with Search Indexes > "Add new rule". (see [below for nested schema](#nestedatt--positive_search_index_permissions))
-- `positive_upload_permissions` (Attributes List) Upload permissions granted for the role. Negative permissions take precedence over positive ones. UI: Content permissions > "Records and assets permissions" (media area). (see [below for nested schema](#nestedatt--positive_upload_permissions))
+- `positive_upload_permissions` (Attributes List) Upload permissions granted for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > "Records and assets permissions" (media area). (see [below for nested schema](#nestedatt--positive_upload_permissions))
 - `project` (String) Key of the provider's `api_tokens` map whose token is used for all API calls of this resource. When omitted, the default token (`api_token` attribute or `DATOCMS_API_TOKEN` environment variable) is used. Changing this attribute forces the resource to be recreated, since each key targets a different DatoCMS project.
 
 ### Read-Only
