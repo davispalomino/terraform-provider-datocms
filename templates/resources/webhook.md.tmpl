@@ -57,4 +57,4 @@ Import is supported using the webhook ID, optionally prefixed with the project k
 
 {{ codefile "shell" .ImportFile }}
 
-Note: the DatoCMS API does not return `http_basic_password`, so after an import the password must be re-set in the configuration.
+Note: the DatoCMS API returns `http_basic_user` and `http_basic_password` on GET, so the import also populates the basic auth credentials (both attributes are marked sensitive).

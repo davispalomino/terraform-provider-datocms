@@ -181,6 +181,7 @@ func (r *WebhookResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"http_basic_user": schema.StringAttribute{
 				Optional:            true,
+				Sensitive:           true,
 				MarkdownDescription: "HTTP Basic Authorization username. UI: HTTP Settings > \"HTTP basic auth\" > \"User\".",
 			},
 			"http_basic_password": schema.StringAttribute{
@@ -289,9 +290,10 @@ func webhookAttributesFromModel(ctx context.Context, data *WebhookResourceModel)
 }
 
 // modelFromWebhook maps a webhook API response onto the resource model. The
-// stored http_basic_password is preserved when the API returns null for it
-// (standard drift protection for secrets), since responses are not guaranteed
-// to echo the secret back.
+// CMA returns http_basic_password on GET (verified against the hyperschema
+// and live responses), so reads and imports populate it; as a defensive
+// fallback, a null password in the response preserves the value already in
+// state instead of clearing it.
 func modelFromWebhook(ctx context.Context, webhook *webhookData, data *WebhookResourceModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 	var d diag.Diagnostics

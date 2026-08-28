@@ -45,6 +45,8 @@ resource "datocms_webhook" "records_publish" {
   # UI: HTTP Body > "Payload format", "Expand nested blocks in records?" and
   # "Send a custom payload?". Setting custom_payload turns the toggle on; the
   # template is rendered with Mustache against the default webhook payload.
+  # Mustache braces ({{ }}) need no escaping in Terraform strings; only a
+  # literal ${ or %{ must be escaped as $${ / %%{.
   payload_api_version     = "3"
   nested_items_in_payload = false
   custom_payload          = <<-EOT
