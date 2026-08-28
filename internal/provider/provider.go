@@ -159,6 +159,7 @@ func (p *DatoCMSProvider) Resources(ctx context.Context) []func() resource.Resou
 		NewAccessTokenResource,
 		NewRoleResource,
 		NewWebhookResource,
+		NewWorkflowResource,
 	}
 }
 

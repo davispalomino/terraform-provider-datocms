@@ -60,6 +60,8 @@ resource "datocms_webhook" "records_publish" {
   # UI: HTTP Body > "Payload format", "Expand nested blocks in records?" and
   # "Send a custom payload?". Setting custom_payload turns the toggle on; the
   # template is rendered with Mustache against the default webhook payload.
+  # Mustache braces ({{ }}) need no escaping in Terraform strings; only a
+  # literal ${ or %{ must be escaped as $${ / %%{.
   payload_api_version     = "3"
   nested_items_in_payload = false
   custom_payload          = <<-EOT
@@ -122,7 +124,7 @@ The tables below map every field of the "Create a new webhook" form in the DatoC
 - `enabled` (Boolean) Whether the webhook is enabled and sending events or not. UI: "Enabled?" toggle, on by default.
 - `headers` (Map of String) Additional headers that will be sent with the webhook call. UI: HTTP Settings > "Custom headers" > "Add new header".
 - `http_basic_password` (String, Sensitive) HTTP Basic Authorization password. UI: HTTP Settings > "HTTP basic auth" > "Password".
-- `http_basic_user` (String) HTTP Basic Authorization username. UI: HTTP Settings > "HTTP basic auth" > "User".
+- `http_basic_user` (String, Sensitive) HTTP Basic Authorization username. UI: HTTP Settings > "HTTP basic auth" > "User".
 - `nested_items_in_payload` (Boolean) Whether the records present in the payload show blocks expanded or not. UI: HTTP Body > "Expand nested blocks in records?" toggle.
 - `payload_api_version` (String) API version used when serializing entities in the payload. UI: HTTP Body > "Payload format" select, where `"3"` corresponds to "API Version 3" (the UI default).
 - `project` (String) Key of the provider's `api_tokens` map whose token is used for all API calls of this resource. When omitted, the default token (`api_token` attribute or `DATOCMS_API_TOKEN` environment variable) is used. Changing this attribute forces the resource to be recreated, since each key targets a different DatoCMS project.
@@ -158,7 +160,8 @@ Import is supported using the webhook ID, optionally prefixed with the project k
 ```shell
 # Webhooks can be imported using the webhook ID
 # (shown in the URL when editing the webhook in the DatoCMS UI, or returned by GET /webhooks).
-# Note: http_basic_password is not returned by the API and must be re-set in the configuration.
+# Note: the API returns http_basic_user and http_basic_password on GET,
+# so the import also populates the basic auth credentials.
 terraform import datocms_webhook.store_publish 12345
 
 # When the resource uses a project from the provider's api_tokens map,
@@ -166,4 +169,4 @@ terraform import datocms_webhook.store_publish 12345
 terraform import datocms_webhook.store_publish store-one/12345
 ```
 
-Note: the DatoCMS API does not return `http_basic_password`, so after an import the password must be re-set in the configuration.
+Note: the DatoCMS API returns `http_basic_user` and `http_basic_password` on GET, so the import also populates the basic auth credentials (both attributes are marked sensitive).

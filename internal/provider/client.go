@@ -59,7 +59,7 @@ func (c *DatoCMSClient) forProject(project string) (*DatoCMSClient, error) {
 
 // parseImportID splits a resource import ID into its optional project key and
 // the resource ID. The compound form is "project/id" (for example
-// "store-one/334477"); an ID without "/" selects the default token (empty
+// "store-one/12345"); an ID without "/" selects the default token (empty
 // project).
 func parseImportID(importID string) (project, id string) {
 	if before, after, found := strings.Cut(importID, "/"); found {
@@ -512,4 +512,82 @@ func (c *DatoCMSClient) UpdateAccessToken(ctx context.Context, id string, attrs 
 // (CANNOT_DESTROY_CURRENT_USER).
 func (c *DatoCMSClient) DeleteAccessToken(ctx context.Context, id string) error {
 	return c.doRequest(ctx, http.MethodDelete, "/access_tokens/"+url.PathEscape(id), nil, nil)
+}
+
+// --- Workflow API types (JSON:API) ---
+
+// workflowStage mirrors one entry of the workflow stages array. Per the CMA
+// hyperschema, id and name are required; description is optional and
+// nullable; initial marks the starting stage (a plain optional boolean, not
+// derived by the API). initial serializes explicitly so a false value is
+// never dropped.
+type workflowStage struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	Initial     bool    `json:"initial"`
+}
+
+// workflowAttributes mirrors the workflow attributes object of the CMA. The
+// create endpoint requires name, api_key and stages (minItems: 1).
+type workflowAttributes struct {
+	Name   string          `json:"name"`
+	APIKey string          `json:"api_key"`
+	Stages []workflowStage `json:"stages"`
+}
+
+// workflowData is the JSON:API resource object for a workflow.
+type workflowData struct {
+	ID         string             `json:"id,omitempty"`
+	Type       string             `json:"type"`
+	Attributes workflowAttributes `json:"attributes"`
+}
+
+// workflowPayload wraps a single workflow document.
+type workflowPayload struct {
+	Data workflowData `json:"data"`
+}
+
+// CreateWorkflow creates a workflow via POST /workflows.
+func (c *DatoCMSClient) CreateWorkflow(ctx context.Context, attrs workflowAttributes) (*workflowData, error) {
+	body := workflowPayload{Data: workflowData{
+		Type:       "workflow",
+		Attributes: attrs,
+	}}
+	var out workflowPayload
+	if err := c.doRequest(ctx, http.MethodPost, "/workflows", body, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// GetWorkflow retrieves a workflow via GET /workflows/{id}. Returns an error
+// wrapping errNotFound on 404.
+func (c *DatoCMSClient) GetWorkflow(ctx context.Context, id string) (*workflowData, error) {
+	var out workflowPayload
+	if err := c.doRequest(ctx, http.MethodGet, "/workflows/"+url.PathEscape(id), nil, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// UpdateWorkflow updates a workflow via PUT /workflows/{id}. The full
+// attribute set is always sent (the update schema accepts any subset, but
+// sending everything keeps the configuration authoritative).
+func (c *DatoCMSClient) UpdateWorkflow(ctx context.Context, id string, attrs workflowAttributes) (*workflowData, error) {
+	body := workflowPayload{Data: workflowData{
+		ID:         id,
+		Type:       "workflow",
+		Attributes: attrs,
+	}}
+	var out workflowPayload
+	if err := c.doRequest(ctx, http.MethodPut, "/workflows/"+url.PathEscape(id), body, &out); err != nil {
+		return nil, err
+	}
+	return &out.Data, nil
+}
+
+// DeleteWorkflow deletes a workflow via DELETE /workflows/{id}.
+func (c *DatoCMSClient) DeleteWorkflow(ctx context.Context, id string) error {
+	return c.doRequest(ctx, http.MethodDelete, "/workflows/"+url.PathEscape(id), nil, nil)
 }

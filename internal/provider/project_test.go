@@ -100,8 +100,8 @@ func TestParseImportID(t *testing.T) {
 		wantProject string
 		wantID      string
 	}{
-		{name: "plain ID", importID: "334477", wantProject: "", wantID: "334477"},
-		{name: "compound ID", importID: "store-one/334477", wantProject: "store-one", wantID: "334477"},
+		{name: "plain ID", importID: "12345", wantProject: "", wantID: "12345"},
+		{name: "compound ID", importID: "store-one/12345", wantProject: "store-one", wantID: "12345"},
 		{name: "ID with extra slash", importID: "store-one/a/b", wantProject: "store-one", wantID: "a/b"},
 		{name: "missing ID", importID: "store-one/", wantProject: "store-one", wantID: ""},
 		{name: "empty", importID: "", wantProject: "", wantID: ""},

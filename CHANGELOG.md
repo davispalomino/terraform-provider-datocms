@@ -1,3 +1,10 @@
+## 1.3.0
+
+FEATURES:
+
+* **New Resource:** `datocms_workflow` manages DatoCMS workflows (name, `api_key` and ordered `stages` with optional description and initial flag), including the `project` attribute and compound `project/id` import supported by the other resources
+* resource/datocms_webhook: `http_basic_user` is now marked sensitive (like `http_basic_password`); import docs corrected: the API does return the basic auth credentials on GET, so imports populate them
+
 ## 1.2.0
 
 FEATURES:
