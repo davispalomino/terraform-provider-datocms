@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -187,7 +188,7 @@ func newWorkflowTestServer(t *testing.T, wantToken string) (*httptest.Server, ma
 				t.Errorf("decoding create body: %v", err)
 			}
 			nextID++
-			payload.Data.ID = "94" + string(rune('0'+nextID))
+			payload.Data.ID = "94" + strconv.Itoa(nextID)
 			store[payload.Data.ID] = payload.Data
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(workflowPayload{Data: payload.Data})
@@ -234,6 +235,7 @@ func newWorkflowTestServer(t *testing.T, wantToken string) (*httptest.Server, ma
 
 func testWorkflowAttrs() workflowAttributes {
 	description := "Editor is waiting for approval"
+	//nolint:gosec // G101 false positive: api_key is the workflow slug, not a credential
 	return workflowAttributes{
 		Name:   "Approval by publisher",
 		APIKey: "approval_by_publisher",
