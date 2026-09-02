@@ -12,14 +12,14 @@ import (
 )
 
 func emptyRoleModelLists(m *RoleResourceModel) {
-	m.PositiveItemTypePermissions = types.ListValueMust(itemTypePermissionObjectType, []attr.Value{})
-	m.NegativeItemTypePermissions = types.ListValueMust(itemTypePermissionObjectType, []attr.Value{})
-	m.PositiveUploadPermissions = types.ListValueMust(uploadPermissionObjectType, []attr.Value{})
-	m.NegativeUploadPermissions = types.ListValueMust(uploadPermissionObjectType, []attr.Value{})
-	m.PositiveBuildTriggerPermissions = types.ListValueMust(buildTriggerPermissionObjectType, []attr.Value{})
-	m.NegativeBuildTriggerPermissions = types.ListValueMust(buildTriggerPermissionObjectType, []attr.Value{})
-	m.PositiveSearchIndexPermissions = types.ListValueMust(searchIndexPermissionObjectType, []attr.Value{})
-	m.NegativeSearchIndexPermissions = types.ListValueMust(searchIndexPermissionObjectType, []attr.Value{})
+	m.PositiveItemTypePermissions = types.SetValueMust(itemTypePermissionObjectType, []attr.Value{})
+	m.NegativeItemTypePermissions = types.SetValueMust(itemTypePermissionObjectType, []attr.Value{})
+	m.PositiveUploadPermissions = types.SetValueMust(uploadPermissionObjectType, []attr.Value{})
+	m.NegativeUploadPermissions = types.SetValueMust(uploadPermissionObjectType, []attr.Value{})
+	m.PositiveBuildTriggerPermissions = types.SetValueMust(buildTriggerPermissionObjectType, []attr.Value{})
+	m.NegativeBuildTriggerPermissions = types.SetValueMust(buildTriggerPermissionObjectType, []attr.Value{})
+	m.PositiveSearchIndexPermissions = types.SetValueMust(searchIndexPermissionObjectType, []attr.Value{})
+	m.NegativeSearchIndexPermissions = types.SetValueMust(searchIndexPermissionObjectType, []attr.Value{})
 	m.InheritsPermissionsFrom = types.ListValueMust(types.StringType, []attr.Value{})
 }
 
@@ -52,7 +52,7 @@ func TestRoleAttributesFromModel_Payload(t *testing.T) {
 	}
 	emptyRoleModelLists(&model)
 
-	model.PositiveItemTypePermissions = types.ListValueMust(itemTypePermissionObjectType, []attr.Value{
+	model.PositiveItemTypePermissions = types.SetValueMust(itemTypePermissionObjectType, []attr.Value{
 		types.ObjectValueMust(itemTypePermissionObjectType.AttrTypes, map[string]attr.Value{
 			"action":             types.StringValue("all"),
 			"environment":        types.StringValue("main"),
@@ -65,7 +65,7 @@ func TestRoleAttributesFromModel_Payload(t *testing.T) {
 			"locale":             types.StringNull(),
 		}),
 	})
-	model.PositiveUploadPermissions = types.ListValueMust(uploadPermissionObjectType, []attr.Value{
+	model.PositiveUploadPermissions = types.SetValueMust(uploadPermissionObjectType, []attr.Value{
 		types.ObjectValueMust(uploadPermissionObjectType.AttrTypes, map[string]attr.Value{
 			"action":                    types.StringValue("all"),
 			"environment":               types.StringValue("main"),
@@ -76,12 +76,12 @@ func TestRoleAttributesFromModel_Payload(t *testing.T) {
 			"locale":                    types.StringNull(),
 		}),
 	})
-	model.PositiveBuildTriggerPermissions = types.ListValueMust(buildTriggerPermissionObjectType, []attr.Value{
+	model.PositiveBuildTriggerPermissions = types.SetValueMust(buildTriggerPermissionObjectType, []attr.Value{
 		types.ObjectValueMust(buildTriggerPermissionObjectType.AttrTypes, map[string]attr.Value{
 			"build_trigger": types.StringNull(),
 		}),
 	})
-	model.PositiveSearchIndexPermissions = types.ListValueMust(searchIndexPermissionObjectType, []attr.Value{
+	model.PositiveSearchIndexPermissions = types.SetValueMust(searchIndexPermissionObjectType, []attr.Value{
 		types.ObjectValueMust(searchIndexPermissionObjectType.AttrTypes, map[string]attr.Value{
 			"search_index": types.StringValue("42"),
 		}),
@@ -231,24 +231,22 @@ func TestRoleAttributesFromModel_Payload(t *testing.T) {
 func TestRoleAttributesFromModel_OmittedContentListsAreNotSent(t *testing.T) {
 	ctx := context.Background()
 
-	for name, listValue := range map[string]func() types.List{
-		"null": func() types.List { return types.ListNull(itemTypePermissionObjectType) },
-		"unknown": func() types.List {
-			return types.ListUnknown(itemTypePermissionObjectType)
-		},
+	for name, setValue := range map[string]func() types.Set{
+		"null":    func() types.Set { return types.SetNull(itemTypePermissionObjectType) },
+		"unknown": func() types.Set { return types.SetUnknown(itemTypePermissionObjectType) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			model := RoleResourceModel{Name: types.StringValue("developer")}
 			emptyRoleModelLists(&model)
-			model.PositiveItemTypePermissions = listValue()
+			model.PositiveItemTypePermissions = setValue()
 			if name == "null" {
-				model.NegativeItemTypePermissions = types.ListNull(itemTypePermissionObjectType)
-				model.PositiveUploadPermissions = types.ListNull(uploadPermissionObjectType)
-				model.NegativeUploadPermissions = types.ListNull(uploadPermissionObjectType)
+				model.NegativeItemTypePermissions = types.SetNull(itemTypePermissionObjectType)
+				model.PositiveUploadPermissions = types.SetNull(uploadPermissionObjectType)
+				model.NegativeUploadPermissions = types.SetNull(uploadPermissionObjectType)
 			} else {
-				model.NegativeItemTypePermissions = types.ListUnknown(itemTypePermissionObjectType)
-				model.PositiveUploadPermissions = types.ListUnknown(uploadPermissionObjectType)
-				model.NegativeUploadPermissions = types.ListUnknown(uploadPermissionObjectType)
+				model.NegativeItemTypePermissions = types.SetUnknown(itemTypePermissionObjectType)
+				model.PositiveUploadPermissions = types.SetUnknown(uploadPermissionObjectType)
+				model.NegativeUploadPermissions = types.SetUnknown(uploadPermissionObjectType)
 			}
 
 			attrs, _, diags := roleAttributesFromModel(ctx, &model)
@@ -366,5 +364,40 @@ func TestRoleAttributesFromModel_EmptyInheritsSerializesAsEmptyArray(t *testing.
 	}
 	if string(raw) != `{"inherits_permissions_from":{"data":[]}}` {
 		t.Errorf("relationships = %s, want empty data array", raw)
+	}
+}
+
+// itemTypePermissionValue builds a minimal permission object for set tests.
+func itemTypePermissionValue(action, environment string) attr.Value {
+	return types.ObjectValueMust(itemTypePermissionObjectType.AttrTypes, map[string]attr.Value{
+		"action":             types.StringValue(action),
+		"environment":        types.StringValue(environment),
+		"item_type":          types.StringNull(),
+		"workflow":           types.StringNull(),
+		"on_stage":           types.StringNull(),
+		"to_stage":           types.StringNull(),
+		"on_creator":         types.StringNull(),
+		"localization_scope": types.StringNull(),
+		"locale":             types.StringNull(),
+	})
+}
+
+// TestRolePermissionSetsAreOrderIndependent documents why the permission
+// rule collections are sets: the same rules in a different order compare
+// equal (no drift), while genuinely different rules do not.
+func TestRolePermissionSetsAreOrderIndependent(t *testing.T) {
+	ruleA := itemTypePermissionValue("all", "main")
+	ruleB := itemTypePermissionValue("read", "main")
+	ruleC := itemTypePermissionValue("read", "sandbox")
+
+	orderAB := types.SetValueMust(itemTypePermissionObjectType, []attr.Value{ruleA, ruleB})
+	orderBA := types.SetValueMust(itemTypePermissionObjectType, []attr.Value{ruleB, ruleA})
+	if !orderAB.Equal(orderBA) {
+		t.Errorf("same rules in different order must be equal as sets")
+	}
+
+	different := types.SetValueMust(itemTypePermissionObjectType, []attr.Value{ruleA, ruleC})
+	if orderAB.Equal(different) {
+		t.Errorf("different rules must not compare equal")
 	}
 }

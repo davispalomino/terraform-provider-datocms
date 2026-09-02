@@ -1,3 +1,9 @@
+## 1.4.0
+
+FEATURES:
+
+* resource/datocms_role: permission rule lists (`positive/negative_item_type_permissions`, `positive/negative_upload_permissions`, `positive/negative_build_trigger_permissions`, `positive/negative_search_index_permissions`) are now sets: rule order never causes drift. Existing states load unchanged (no state migration needed); `inherits_permissions_from` stays an ordered list
+
 ## 1.3.0
 
 FEATURES:
