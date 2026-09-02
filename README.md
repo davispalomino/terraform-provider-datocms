@@ -11,6 +11,7 @@ A Terraform provider to manage [DatoCMS](https://www.datocms.com/) project confi
 | `datocms_access_token` | API tokens (CMA resource `access_token`) | Project Settings > API Tokens |
 | `datocms_role` | Roles and their permissions | Settings > Roles |
 | `datocms_webhook` | Webhooks | Settings > Webhooks |
+| `datocms_workflow` | Workflows (content approval stages) | Settings > Workflows |
 
 ## Requirements
 
@@ -60,6 +61,19 @@ resource "datocms_access_token" "frontend" {
   name           = "Frontend CDA token"
   role_id        = datocms_role.editor.id
   can_access_cda = true
+}
+
+# Editorial workflow: content moves from draft to publication through custom
+# approval stages. Exactly one stage sets initial = true.
+resource "datocms_workflow" "approval_by_publisher" {
+  name    = "Approval by publisher"
+  api_key = "approval_by_publisher"
+
+  stages = [
+    { id = "work_in_progress", name = "Work in progress", initial = true },
+    { id = "in_review", name = "In review" },
+    { id = "approved", name = "Approved" },
+  ]
 }
 ```
 
@@ -111,6 +125,16 @@ Full mapping in [docs/resources/webhook.md](docs/resources/webhook.md).
 | Permissions > Access the Content Management API | `can_access_cma` |
 
 Full mapping in [docs/resources/access_token.md](docs/resources/access_token.md). The generated token secret is stored in the Terraform state; treat the state as sensitive.
+
+### `datocms_workflow` ("New workflow" screen)
+
+| DatoCMS UI field | Terraform attribute |
+|---|---|
+| Name | `name` |
+| API identifier | `api_key` |
+| Workflow stages > Add new stage | `stages` (each stage is one list element with `id`, `name`, optional `description` and `initial`) |
+
+Set `initial = true` on exactly one stage: that is the stage where new records enter the workflow. Full mapping in [docs/resources/workflow.md](docs/resources/workflow.md).
 
 ## Authentication
 
@@ -213,3 +237,4 @@ make generate  # regenerate docs/ with tfplugindocs
 - [datocms_access_token](docs/resources/access_token.md)
 - [datocms_role](docs/resources/role.md)
 - [datocms_webhook](docs/resources/webhook.md)
+- [datocms_workflow](docs/resources/workflow.md)
