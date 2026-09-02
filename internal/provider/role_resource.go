@@ -15,8 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/defaults"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -62,14 +63,14 @@ type RoleResourceModel struct {
 	CanAccessBuildEventsLog         types.Bool   `tfsdk:"can_access_build_events_log"`
 	CanAccessSearchIndexEventsLog   types.Bool   `tfsdk:"can_access_search_index_events_log"`
 	EnvironmentsAccess              types.String `tfsdk:"environments_access"`
-	PositiveItemTypePermissions     types.List   `tfsdk:"positive_item_type_permissions"`
-	NegativeItemTypePermissions     types.List   `tfsdk:"negative_item_type_permissions"`
-	PositiveUploadPermissions       types.List   `tfsdk:"positive_upload_permissions"`
-	NegativeUploadPermissions       types.List   `tfsdk:"negative_upload_permissions"`
-	PositiveBuildTriggerPermissions types.List   `tfsdk:"positive_build_trigger_permissions"`
-	NegativeBuildTriggerPermissions types.List   `tfsdk:"negative_build_trigger_permissions"`
-	PositiveSearchIndexPermissions  types.List   `tfsdk:"positive_search_index_permissions"`
-	NegativeSearchIndexPermissions  types.List   `tfsdk:"negative_search_index_permissions"`
+	PositiveItemTypePermissions     types.Set    `tfsdk:"positive_item_type_permissions"`
+	NegativeItemTypePermissions     types.Set    `tfsdk:"negative_item_type_permissions"`
+	PositiveUploadPermissions       types.Set    `tfsdk:"positive_upload_permissions"`
+	NegativeUploadPermissions       types.Set    `tfsdk:"negative_upload_permissions"`
+	PositiveBuildTriggerPermissions types.Set    `tfsdk:"positive_build_trigger_permissions"`
+	NegativeBuildTriggerPermissions types.Set    `tfsdk:"negative_build_trigger_permissions"`
+	PositiveSearchIndexPermissions  types.Set    `tfsdk:"positive_search_index_permissions"`
+	NegativeSearchIndexPermissions  types.Set    `tfsdk:"negative_search_index_permissions"`
 	InheritsPermissionsFrom         types.List   `tfsdk:"inherits_permissions_from"`
 	// TODO: expose meta.final_permissions (read-only effective permission
 	// set after resolving inherited roles) as a computed attribute.
@@ -160,14 +161,18 @@ func emptyListDefault(elemType attr.Type) defaults.List {
 	return listdefault.StaticValue(types.ListValueMust(elemType, []attr.Value{}))
 }
 
-func itemTypePermissionsAttribute(polarity string) schema.ListNestedAttribute {
-	return schema.ListNestedAttribute{
+func emptySetDefault(elemType attr.Type) defaults.Set {
+	return setdefault.StaticValue(types.SetValueMust(elemType, []attr.Value{}))
+}
+
+func itemTypePermissionsAttribute(polarity string) schema.SetNestedAttribute {
+	return schema.SetNestedAttribute{
 		Optional: true,
 		Computed: true,
-		PlanModifiers: []planmodifier.List{
-			listplanmodifier.UseStateForUnknown(),
+		PlanModifiers: []planmodifier.Set{
+			setplanmodifier.UseStateForUnknown(),
 		},
-		MarkdownDescription: "Item type (model) permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > \"Records and assets permissions\".",
+		MarkdownDescription: "Item type (model) permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the rule set is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > \"Records and assets permissions\".",
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
 				"action": schema.StringAttribute{
@@ -220,14 +225,14 @@ func itemTypePermissionsAttribute(polarity string) schema.ListNestedAttribute {
 	}
 }
 
-func uploadPermissionsAttribute(polarity string) schema.ListNestedAttribute {
-	return schema.ListNestedAttribute{
+func uploadPermissionsAttribute(polarity string) schema.SetNestedAttribute {
+	return schema.SetNestedAttribute{
 		Optional: true,
 		Computed: true,
-		PlanModifiers: []planmodifier.List{
-			listplanmodifier.UseStateForUnknown(),
+		PlanModifiers: []planmodifier.Set{
+			setplanmodifier.UseStateForUnknown(),
 		},
-		MarkdownDescription: "Upload permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the list is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > \"Records and assets permissions\" (media area).",
+		MarkdownDescription: "Upload permissions " + polarity + " for the role. Negative permissions take precedence over positive ones. When omitted from the configuration the rule set is left untouched: whatever is set in the DatoCMS UI is preserved (useful together with `terraform import`). Declare it, even as `[]`, to have Terraform manage it. UI: Content permissions > \"Records and assets permissions\" (media area).",
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
 				"action": schema.StringAttribute{
@@ -272,11 +277,11 @@ func uploadPermissionsAttribute(polarity string) schema.ListNestedAttribute {
 	}
 }
 
-func buildTriggerPermissionsAttribute(polarity string) schema.ListNestedAttribute {
-	return schema.ListNestedAttribute{
+func buildTriggerPermissionsAttribute(polarity string) schema.SetNestedAttribute {
+	return schema.SetNestedAttribute{
 		Optional:            true,
 		Computed:            true,
-		Default:             emptyListDefault(buildTriggerPermissionObjectType),
+		Default:             emptySetDefault(buildTriggerPermissionObjectType),
 		MarkdownDescription: "Build triggers the role can " + polarity + " trigger manually. A `null` `build_trigger` covers every build trigger. Creating/editing the triggers themselves is gated by `can_manage_build_triggers`. UI: Build permissions > \"Add new rule\".",
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
@@ -289,11 +294,11 @@ func buildTriggerPermissionsAttribute(polarity string) schema.ListNestedAttribut
 	}
 }
 
-func searchIndexPermissionsAttribute(polarity string) schema.ListNestedAttribute {
-	return schema.ListNestedAttribute{
+func searchIndexPermissionsAttribute(polarity string) schema.SetNestedAttribute {
+	return schema.SetNestedAttribute{
 		Optional:            true,
 		Computed:            true,
-		Default:             emptyListDefault(searchIndexPermissionObjectType),
+		Default:             emptySetDefault(searchIndexPermissionObjectType),
 		MarkdownDescription: "Search indexes the role can " + polarity + " re-index manually. A `null` `search_index` covers every index. Creating/editing the indexes themselves is gated by `can_manage_search_indexes`. UI: Permissions to index with Search Indexes > \"Add new rule\".",
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
@@ -437,28 +442,28 @@ func roleAttributesFromModel(ctx context.Context, data *RoleResourceModel) (role
 		EnvironmentsAccess:            stringPtr(data.EnvironmentsAccess),
 	}
 
-	if isKnownList(data.PositiveItemTypePermissions) {
+	if isKnownSet(data.PositiveItemTypePermissions) {
 		var itemTypeModels []itemTypePermissionModel
 		diags.Append(data.PositiveItemTypePermissions.ElementsAs(ctx, &itemTypeModels, false)...)
 		perms := itemTypePermissionsFromModels(itemTypeModels)
 		attrs.PositiveItemTypePermissions = &perms
 	}
 
-	if isKnownList(data.NegativeItemTypePermissions) {
+	if isKnownSet(data.NegativeItemTypePermissions) {
 		var itemTypeModels []itemTypePermissionModel
 		diags.Append(data.NegativeItemTypePermissions.ElementsAs(ctx, &itemTypeModels, false)...)
 		perms := itemTypePermissionsFromModels(itemTypeModels)
 		attrs.NegativeItemTypePermissions = &perms
 	}
 
-	if isKnownList(data.PositiveUploadPermissions) {
+	if isKnownSet(data.PositiveUploadPermissions) {
 		var uploadModels []uploadPermissionModel
 		diags.Append(data.PositiveUploadPermissions.ElementsAs(ctx, &uploadModels, false)...)
 		perms := uploadPermissionsFromModels(uploadModels)
 		attrs.PositiveUploadPermissions = &perms
 	}
 
-	if isKnownList(data.NegativeUploadPermissions) {
+	if isKnownSet(data.NegativeUploadPermissions) {
 		var uploadModels []uploadPermissionModel
 		diags.Append(data.NegativeUploadPermissions.ElementsAs(ctx, &uploadModels, false)...)
 		perms := uploadPermissionsFromModels(uploadModels)
@@ -537,11 +542,11 @@ func searchIndexPermissionsFromModels(models []searchIndexPermissionModel) []rol
 	return out
 }
 
-// isKnownList reports whether a list attribute carries a concrete value
+// isKnownSet reports whether a set attribute carries a concrete value
 // (declared in configuration or resolved from state), as opposed to being
 // null (omitted) or unknown (omitted on create).
-func isKnownList(l types.List) bool {
-	return !l.IsNull() && !l.IsUnknown()
+func isKnownSet(s types.Set) bool {
+	return !s.IsNull() && !s.IsUnknown()
 }
 
 // completeContentPermissionPairs fills the missing half of a partially
@@ -658,21 +663,21 @@ func modelFromRole(ctx context.Context, role *roleData, data *RoleResourceModel)
 	}
 
 	var d diag.Diagnostics
-	data.PositiveItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(a.PositiveItemTypePermissions)))
+	data.PositiveItemTypePermissions, d = types.SetValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(a.PositiveItemTypePermissions)))
 	diags.Append(d...)
-	data.NegativeItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(a.NegativeItemTypePermissions)))
+	data.NegativeItemTypePermissions, d = types.SetValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(a.NegativeItemTypePermissions)))
 	diags.Append(d...)
-	data.PositiveUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(a.PositiveUploadPermissions)))
+	data.PositiveUploadPermissions, d = types.SetValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(a.PositiveUploadPermissions)))
 	diags.Append(d...)
-	data.NegativeUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(a.NegativeUploadPermissions)))
+	data.NegativeUploadPermissions, d = types.SetValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(a.NegativeUploadPermissions)))
 	diags.Append(d...)
-	data.PositiveBuildTriggerPermissions, d = types.ListValueFrom(ctx, buildTriggerPermissionObjectType, buildTriggerModelsFor(a.PositiveBuildTriggerPermissions))
+	data.PositiveBuildTriggerPermissions, d = types.SetValueFrom(ctx, buildTriggerPermissionObjectType, buildTriggerModelsFor(a.PositiveBuildTriggerPermissions))
 	diags.Append(d...)
-	data.NegativeBuildTriggerPermissions, d = types.ListValueFrom(ctx, buildTriggerPermissionObjectType, buildTriggerModelsFor(a.NegativeBuildTriggerPermissions))
+	data.NegativeBuildTriggerPermissions, d = types.SetValueFrom(ctx, buildTriggerPermissionObjectType, buildTriggerModelsFor(a.NegativeBuildTriggerPermissions))
 	diags.Append(d...)
-	data.PositiveSearchIndexPermissions, d = types.ListValueFrom(ctx, searchIndexPermissionObjectType, searchIndexModelsFor(a.PositiveSearchIndexPermissions))
+	data.PositiveSearchIndexPermissions, d = types.SetValueFrom(ctx, searchIndexPermissionObjectType, searchIndexModelsFor(a.PositiveSearchIndexPermissions))
 	diags.Append(d...)
-	data.NegativeSearchIndexPermissions, d = types.ListValueFrom(ctx, searchIndexPermissionObjectType, searchIndexModelsFor(a.NegativeSearchIndexPermissions))
+	data.NegativeSearchIndexPermissions, d = types.SetValueFrom(ctx, searchIndexPermissionObjectType, searchIndexModelsFor(a.NegativeSearchIndexPermissions))
 	diags.Append(d...)
 
 	inheritsFrom := []string{}
@@ -732,19 +737,19 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 
 	var d diag.Diagnostics
 	if data.PositiveItemTypePermissions.IsUnknown() {
-		data.PositiveItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(role.Attributes.PositiveItemTypePermissions)))
+		data.PositiveItemTypePermissions, d = types.SetValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(role.Attributes.PositiveItemTypePermissions)))
 		resp.Diagnostics.Append(d...)
 	}
 	if data.NegativeItemTypePermissions.IsUnknown() {
-		data.NegativeItemTypePermissions, d = types.ListValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(role.Attributes.NegativeItemTypePermissions)))
+		data.NegativeItemTypePermissions, d = types.SetValueFrom(ctx, itemTypePermissionObjectType, itemTypeModelsFromAPI(derefPermissions(role.Attributes.NegativeItemTypePermissions)))
 		resp.Diagnostics.Append(d...)
 	}
 	if data.PositiveUploadPermissions.IsUnknown() {
-		data.PositiveUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(role.Attributes.PositiveUploadPermissions)))
+		data.PositiveUploadPermissions, d = types.SetValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(role.Attributes.PositiveUploadPermissions)))
 		resp.Diagnostics.Append(d...)
 	}
 	if data.NegativeUploadPermissions.IsUnknown() {
-		data.NegativeUploadPermissions, d = types.ListValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(role.Attributes.NegativeUploadPermissions)))
+		data.NegativeUploadPermissions, d = types.SetValueFrom(ctx, uploadPermissionObjectType, uploadModelsFromAPI(derefPermissions(role.Attributes.NegativeUploadPermissions)))
 		resp.Diagnostics.Append(d...)
 	}
 	if resp.Diagnostics.HasError() {
